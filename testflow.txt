@@ -1,0 +1,12 @@
+1 - from each entry in tests
+2 - set freq,power,symrate,pls
+3 - verify rx lock
+4 - change noise in modulator and set EsNo according to pls
+5 - reset Rx test pattern , wait t sec and verify
+    bitrate positive
+    Good positive	
+    Bad	zero 
+    Missed	zero
+    Same	zero
+    PRBS Err.no errors zero
+

@@ -1,12 +1,14 @@
+# novelsatdemod.py
+
 import time
 import re
-import subprocess
-from snmp import Engine, SNMPv1
-from typing import Optional, Tuple
+from typing import Optional
+
+from snmpcore.base import *
 from constants import *
 
 
-class NovelsatDemod:
+class NovelsatDemod(BaseSnmpClient):
     """
     Simple SNMP-based interface to the Novelsat demodulator.
     """
@@ -17,53 +19,22 @@ class NovelsatDemod:
         public_comm: bytes = b"public",
         private_comm: str = "private",
     ):
-        self.ip = ip
-        self.public = public_comm
-        self.private = private_comm
-        self._int_pattern = re.compile(r'\(-?(\d+)\)')
-
-    def _snmp_get_raw(self, oid: str, delay: float) -> str:
-        """Sleep for `delay`, then fetch raw SNMP response string for `oid`."""
-        time.sleep(delay)
-        with Engine(SNMPv1, defaultCommunity=self.public) as engine:
-            host = engine.Manager(self.ip)
-            return host.get(oid).toString()
-
-    def _parse_int(self, raw: str) -> Optional[int]:
-        """Extract the first integer inside parentheses, or None."""
-        m = self._int_pattern.search(raw)
-        return int(m.group(1)) if m else None
-
-    def _snmp_set(self, oid: str, type_: str, value: str) -> None:
-        """Run snmpset against `oid` with given SNMP datatype and value."""
-        cmd = [
-            "snmpset", "-v1",
-            "-c", self.private,
-            self.ip, oid, type_, value
-        ]
-        try:
-            subprocess.run(cmd, check=True, capture_output=True, text=True)
-        except subprocess.CalledProcessError as e:
-            print(f"SNMP SET failed for {oid}: {e.stderr.strip()}")
+        super().__init__(ip, public_comm, private_comm)
 
     def get_freq(self) -> Optional[int]:
-        """
-        Read and return frequency (as raw integer) from the demod.
-        """
+        """Read and return frequency (as raw integer) from the demod."""
         raw = self._snmp_get_raw(FREQ_OID, delay=2.0)
         return self._parse_int(raw)
 
-    def set_freq(self, freq_khz: float) -> None:
+    def set_freq(self, freq_mhz: float) -> None:
         """
-        Set frequency in kHz. Internally multiplies by 100_000 to match device scaling.
+        Set frequency in mhz. Internally multiplies by 100_000 to match device scaling.
         """
-        scaled = int(freq_khz * 100_000)
+        scaled = int(freq_mhz * 100_000)
         self._snmp_set(FREQ_OID, "u", str(scaled))
 
     def get_symrate(self) -> Optional[int]:
-        """
-        Read and return symbol rate (as raw integer) from the demod.
-        """
+        """Read and return symbol rate (as raw integer) from the demod."""
         raw = self._snmp_get_raw(SYMRATE_OID, delay=2.0)
         return self._parse_int(raw)
 
@@ -86,10 +57,10 @@ class NovelsatDemod:
         self,
         trials: int = 5,
         pre_delay: float = 0.7,
-        interval: float = 0.2
+        interval: float = 0.2,
     ) -> Optional[float]:
         """
-        Poll ES/N0 multiple times, average the hundredths-of-dB values,
+        Poll ES/N0 multiple times, average the hundredths‐of‐dB values,
         divide by 100, and round to two decimals.
         """
         time.sleep(pre_delay)

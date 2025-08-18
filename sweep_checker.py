@@ -5,34 +5,32 @@ import logging
 import traceback
 
 from restcore import restmod
-import novelsatdemod
+from snmpcore import novelsatdemod
 from constants import RESTMOD_IP, ADMIN_USER, ADMIN_PASS
 
 
 class SweepRunner:
-    TOKEN_REFRESH_INTERVAL = 300  # seconds
+    TOKEN_REFRESH_INTERVAL = 300
     BASE_NOISE = 0x1C000
 
     def __init__(
         self,
         output_csv="sweep_results.csv",
         log_file="sweep_errors.log",
+        sweep_configs=None,
     ):
         self.output_csv = output_csv
         self.log_file = log_file
-
-        # Sweep steps
-        self.freq_step  = 100
-        self.symb_step  = 5
+        self.freq_step = 100
+        self.symb_step = 5
         self.power_step = 5
         self.noise_step = 4
-
-        self.mod       = None
-        self.demod     = None
+        self.mod = None
+        self.demod = None
         self.last_params = {}
-        self.resume      = False
-        self.token_ts    = 0
-
+        self.resume = False
+        self.token_ts = 0
+        self.sweep_configs = sweep_configs
         self._setup_logging()
 
     def _setup_logging(self):
@@ -47,7 +45,6 @@ class SweepRunner:
         now = time.time()
         if now - self.token_ts > self.TOKEN_REFRESH_INTERVAL:
             try:
-                # Uses BaseRestClient.refresh_token under the hood
                 self.mod.refresh_token(ADMIN_USER, ADMIN_PASS)
                 self.token_ts = now
                 print(f"🔄 Modulator token refreshed at {time.strftime('%X')}")
@@ -56,8 +53,7 @@ class SweepRunner:
 
     def initialize_hardware(self) -> bool:
         try:
-            # Pass IP, user & pass into the constructor
-            self.mod   = restmod.RestMod(RESTMOD_IP, ADMIN_USER, ADMIN_PASS)
+            self.mod = restmod.RestMod(RESTMOD_IP, ADMIN_USER, ADMIN_PASS)
             self.demod = novelsatdemod.NovelsatDemod()
             self.token_ts = time.time()
             print(f"\n🔐 Authenticated with modulator at {RESTMOD_IP}.\n")
@@ -65,7 +61,7 @@ class SweepRunner:
         except Exception:
             self.logger.error("Initialization failed", exc_info=True)
             return False
-
+        
     def detect_resume(self):
         if not os.path.exists(self.output_csv) or os.stat(self.output_csv).st_size == 0:
             return
@@ -86,85 +82,100 @@ class SweepRunner:
         self.resume = True
 
     def run(self):
-        self.detect_resume()
+        if not self.sweep_configs:
+            self.detect_resume()
+        else:
+            self.resume = False
 
         with open(self.output_csv, "a", newline="") as csvfile:
+            self.csvfile = csvfile
             fieldnames = [
                 "frequency_mhz", "symbol_rate_msps",
                 "power_dbm", "noise_hex", "noise_dec",
                 "locked", "esno_db"
             ]
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
             if os.stat(self.output_csv).st_size == 0:
                 writer.writeheader()
 
             if not self.initialize_hardware():
                 return
 
-            for freq in range(950, 2150, self.freq_step):
-                if self.resume and freq < self.last_params["freq"]:
-                    continue
-                at_freq_resume = self.resume and freq == self.last_params["freq"]
+            configs = self.sweep_configs or [{
+                "freqs":  range(950, 2150, self.freq_step),
+                "symbs":  range(1, 60, self.symb_step),
+                "powers": range(-30, 0, self.power_step),
+            }]
 
-                print(f"📡 Tuning frequency: {freq} MHz")
-                self._refresh_token_if_needed()
-                try:
-                    self.mod.set_freq(freq)
-                    self.demod.set_freq(freq)
-                except Exception:
-                    self.logger.error(f"Failed to set freq={freq}", exc_info=True)
-                    continue
+            for cfg in configs:
+                freqs = cfg.get("freqs")
+                syms = cfg.get("symbs")
+                pows = cfg.get("powers")
+                noises = cfg.get("noises")
 
-                for symb in range(1, 60, self.symb_step):
-                    if at_freq_resume and symb < self.last_params["symb"]:
+                for freq in freqs:
+                    if self.resume and freq < self.last_params["freq"]:
                         continue
-                    at_symb_resume = at_freq_resume and symb == self.last_params["symb"]
+                    at_freq_resume = self.resume and freq == self.last_params["freq"]
 
-                    print(f"🌀 Setting symbol rate: {symb} MSps")
+                    print(f"📡 Tuning frequency: {freq} MHz")
                     self._refresh_token_if_needed()
                     try:
-                        self.mod.set_symrate(symb)
-                        self.demod.set_symrate(symb)
+                        self.mod.set_freq(freq)
+                        self.demod.set_freq(freq)
                     except Exception:
-                        self.logger.error(
-                            f"Failed to set symrate={symb} at freq={freq}",
-                            exc_info=True
-                        )
+                        self.logger.error(f"Failed to set freq={freq}", exc_info=True)
                         continue
 
-                    for pwr in range(-30, 0, self.power_step):
-                        if at_symb_resume and pwr < self.last_params["power"]:
+                    for symb in syms:
+                        if at_freq_resume and symb < self.last_params["symb"]:
                             continue
-                        # only skip power once
-                        at_symb_resume = False
+                        at_symb_resume = at_freq_resume and symb == self.last_params["symb"]
 
-                        print(f"⚡ Applying power level: {pwr} dBm")
+                        print(f"🌀 Setting symbol rate: {symb} MSps")
                         self._refresh_token_if_needed()
                         try:
-                            self.mod.set_power(pwr)
-                            time.sleep(2)
+                            self.mod.set_symrate(symb)
+                            self.demod.set_symrate(symb)
                         except Exception:
                             self.logger.error(
-                                f"Failed to set power={pwr} at f={freq}, s={symb}",
+                                f"Failed to set symrate={symb} at freq={freq}",
                                 exc_info=True
                             )
                             continue
 
-                        self._sweep_noise(freq, symb, pwr, writer)
+                        for pwr in pows:
+                            if at_symb_resume and pwr < self.last_params["power"]:
+                                continue
+                            at_symb_resume = False
 
-    def _sweep_noise(self, freq, symb, pwr, writer):
+                            print(f"⚡ Applying power level: {pwr} dBm")
+                            self._refresh_token_if_needed()
+                            try:
+                                self.mod.set_power(pwr)
+                                time.sleep(2)
+                            except Exception:
+                                self.logger.error(
+                                    f"Failed to set power={pwr} at f={freq}, s={symb}",
+                                    exc_info=True
+                                )
+                                continue
+
+                            self._sweep_noise(freq, symb, pwr, writer, noises)
+
+    def _sweep_noise(self, freq, symb, pwr, writer, noises=None):
         lock_fail = esno_na = 0
         max_fail = 3
-
         resume_noise = self.last_params.get("noise") if self.resume else None
 
-        for offset in range(0, 0x1000, self.noise_step):
-            noise_val = self.BASE_NOISE + offset
+        noise_iter = noises if noises is not None else (
+            self.BASE_NOISE + offset for offset in range(0, 0x1000, self.noise_step)
+        )
+        self.resume = False
+
+        for noise_val in noise_iter:
             if resume_noise is not None and noise_val <= resume_noise:
                 continue
-            # resume only applies to the first matching run
-            self.resume = False
 
             self._refresh_token_if_needed()
             try:
@@ -176,7 +187,7 @@ class SweepRunner:
                 )
                 break
 
-            time.sleep(5)  # let hardware settle
+            time.sleep(5)
 
             try:
                 locked = self.demod.is_locked()
@@ -199,7 +210,7 @@ class SweepRunner:
                 esno_na = 0
 
             if (esno is not None and esno < -2.2) or lock_fail >= max_fail or esno_na >= max_fail:
-                print("⚠️ Too many failures, moving on")
+                print("⚠️ ESNO is below -2.2dB, moving on")
                 break
 
             print(
@@ -217,21 +228,29 @@ class SweepRunner:
                 "esno_db":          esno
             })
 
-            txt_line = (
-                f"{freq},{symb},{pwr},"
-                f"{noise_val:#06X},{noise_val},"
-                f"{locked},{esno:.2f}\n"
-            )
-            with open("sweep_results.csv", "a") as txtfile:
-                txtfile.write(txt_line)
+            try:
+                self.csvfile.flush()
+                os.fsync(self.csvfile.fileno())
+            except Exception:
+                self.logger.error("Failed to flush CSV to disk", exc_info=True)
 
 
 if __name__ == "__main__":
+    custom_config = [
+        {
+            "freqs": [1200],
+            "symbs": [12.0],
+            "powers": range(-60, 0, 5),
+            "noises": range(114688, 120000, 1),
+        },
+    ]
+
+
     runner = SweepRunner(
         output_csv="sweep_results.csv",
-        log_file="sweep_errors.log"
+        log_file="sweep_errors.log",
+        sweep_configs=custom_config
     )
     print("▶️  Starting sweep…")
     runner.run()
     print("✅  Sweep finished.")
-

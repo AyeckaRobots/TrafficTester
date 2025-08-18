@@ -4,7 +4,7 @@ import bisect
 import random
 
 from restcore import restmod
-import novelsatdemod
+from snmpcore import novelsatdemod
 from constants import *
 
 class NoiseIndex:

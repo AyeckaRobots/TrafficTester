@@ -44,7 +44,7 @@ class RestDemod(BaseRestClient):
         if payload:
             self._post("/api/demodulator", payload)
 
-    def reset_advanced_status(self):
+    def reset_counters(self):
         self._get("/api/reset_advanced_status")
 
     def get_packet_traffic(self):
@@ -61,6 +61,14 @@ class RestDemod(BaseRestClient):
         )
         return {k: test_pattern[k] for k in keys if k in test_pattern}
     
+    def switch_rx1(self):
+        payload = {'rf_source': 1}
+        self._post("/api/demodulator", payload)
+
+    def switch_rx2(self):
+        payload = {'rf_source': 2}
+        self._post("/api/demodulator", payload)
+    
     def is_locked(self):
         data = self._get("/api/status")
         lock_state = data["rx"]["state"]
@@ -71,8 +79,4 @@ class RestDemod(BaseRestClient):
             return False
         else:
             raise(1)
-    
-
-        
-
 

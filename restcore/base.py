@@ -31,7 +31,7 @@ class BaseRestClient:
             url,
             json={"username": username, "password": password},
             headers={"Accept": "application/json"},
-            timeout=10,
+            timeout=60,
             verify=self.verify
         )
         resp.raise_for_status()
@@ -42,7 +42,7 @@ class BaseRestClient:
         Generic GET against `{self.base_url}{path}` → parsed JSON.
         """
         url = f"{self.base_url}{path}"
-        resp = requests.get(url, headers=self.headers, timeout=5, verify=self.verify)
+        resp = requests.get(url, headers=self.headers, timeout=60, verify=self.verify)
         resp.raise_for_status()
         return resp.json()
 
@@ -56,7 +56,7 @@ class BaseRestClient:
             url,
             headers=self.headers,
             json=payload,
-            timeout=5,
+            timeout=60,
             verify=self.verify
         )
         resp.raise_for_status()
@@ -69,4 +69,32 @@ class BaseRestClient:
     def refresh_token(self, username: str, password: str) -> None:
         token = self._authenticate(username, password)
         self.headers["Authorization"] = f"Bearer {token}"
+
+    def get_general_info(self):
+        data = self._get("/api/status")
+
+        device_name = data["device_name"]
+        serial_number = data["serial_number"]
+        mdc = data["system"]["sw_version"]["mdc"]
+        bca = data["system"]["sw_version"]["bca"]
+        web = data["system"]["sw_version"]["web"]
+        demodulator_fpga = data["system"]["sw_version"]["demodulator_fpga"]
+        modulator_firmware = data["system"]["sw_version"]["modulator_firmware"]
+        modulator_software = data["system"]["sw_version"]["modulator_software"]
+        hw_version = data["system"]["hw_version"]
+
+        return {
+            "device_name": device_name,
+            "serial_number": serial_number,
+            "mdc": mdc,
+            "bca": bca,
+            "web": web,
+            "demodulator_fpga": demodulator_fpga,
+            "modulator_firmware": modulator_firmware,
+            "modulator_software": modulator_software,
+            "hw_version": hw_version,
+        }
+
+        
+
 
