@@ -238,10 +238,10 @@ class SweepRunner:
 if __name__ == "__main__":
     custom_config = [
         {
-            "freqs": [1200],
-            "symbs": [12.0],
+            "freqs": [2150],
+            "symbs": [30.0],
             "powers": range(-60, 0, 5),
-            "noises": range(114688, 120000, 1),
+            "noises": range(114909, 120000, 1),
         },
     ]
 

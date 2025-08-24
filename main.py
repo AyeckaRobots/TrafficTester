@@ -15,7 +15,10 @@ if __name__ == "__main__":
         runtime=10000,
         bitrate="25M"
     )
-    #demo.switch_rx2()
+    demo.switch_rx1()
+    demo.set_freq(1200)
+    demo.set_symrate(12)
+
     demo.run_iperf()
     """demo.switch_rx1()
     demo.set_freq(1200)

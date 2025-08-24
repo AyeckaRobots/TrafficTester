@@ -2,8 +2,7 @@ import paramiko
 import threading
 import time
 import re
-from collections import deque
-from typing import Optional, Tuple
+from typing import Optional
 
 from snmpcore.base import BaseSnmpClient
 from constants import *
@@ -69,25 +68,11 @@ class HW6Demod(BaseSnmpClient):
             },
         ]
 
-        # in-memory buffers for each host’s iperf output (cumulative across runs)
-        self._iperf_outputs = {host["ip"]: [] for host in self._hosts}
-
-        # tracked PIDs (iperf and its descendants) per host
-        self._iperf_pids = {host["ip"]: set() for host in self._hosts}
-        self._pids_lock = threading.Lock()
-
-        # per-run buffers (reset at the start of each _run_command for that host)
-        # - outputs: raw iperf chunks from current run only
-        # - pcts: extracted percentage values (as floats) from current run only
-        self._current_run_outputs = {host["ip"]: [] for host in self._hosts}
-        self._current_run_pcts = {host["ip"]: [] for host in self._hosts}
+        # new cumulative storage for server percentage values
+        self._server_pct_values = []
 
         self._active_rx = None
 
-        # set switch mode to manual
-        # self._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)
-        # set operation mode to single
-        # self._snmp_set("1.3.6.1.4.1.27928.107.1.3.4.0", "i", 0)
 
     def initial_config(self):
         ...
@@ -174,20 +159,52 @@ class HW6Demod(BaseSnmpClient):
             raise("maybe error in board")
         else:
             raise(Exception)
+        
+    """    def set_label(self, label: str) -> None:
+        if self._active_rx == 1:
+            self._snmp_set(
+                "1.3.6.1.4.1.27928.107.1.1.1.4.3.1.3.1.0", "x", label
+            )
+        elif self._active_rx == 2:
+            self._snmp_set(
+                "1.3.6.1.4.1.27928.107.1.2.1.4.3.1.3.1.0", "x", label
+            )
+        else:
+            raise(Exception)"""
+    
+    def get_label(self) -> str:
+        if self._active_rx == 1:
+            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.1.1.4.3.1.3.1.0", 2.0)
+        elif self._active_rx == 2:
+            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.2.1.4.3.1.3.1.0", 2.0)
+        else:
+            raise(Exception)
+        
+        return raw
+
+
+    def _process_output(self, ip: str, output: str) -> None:
+        """
+        Process iperf command output, accumulate percentage values and print them (server only).
+        """
+        # Changed to extract lost/total fraction and compute percentage to 4 decimal places
+        lost_re = re.compile(r'\s(?P<lost>\d+)/(?P<total>\d+)\s')
+        for m in lost_re.finditer(output):
+            try:
+                lost = float(m.group("lost"))
+                total = float(m.group("total"))
+                pct = (lost / total * 100) if total > 0 else 0.0
+                formatted_pct = f"{pct:.4f}%"
+                if ip == self._server_ip:
+                    self._server_pct_values.append(pct)
+                    print(formatted_pct)
+            except Exception:
+                continue
 
     def _run_command(self, ip: str, username: str, password: str, command: str):
         """
-        Run a remote command over SSH, capture iperf output, track PIDs,
-        and collect per-run values.
-
-        Per-run collections (for this host only) are reset at the start:
-        - self._current_run_outputs[ip]: list[str] of raw output chunks
-        - self._current_run_pcts[ip]: list[float] of extracted percent values
+        Run a remote command over SSH, capture iperf percentage values.
         """
-        # reset per-run lists for this host
-        self._current_run_outputs[ip] = []
-        self._current_run_pcts[ip] = []
-
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
@@ -195,63 +212,21 @@ class HW6Demod(BaseSnmpClient):
             ssh.connect(ip, username=username, password=password)
             print(f"[{ip}] Connected")
 
-            chan = ssh.get_transport().open_session()
-            chan.get_pty()
-            chan.exec_command(command)
+            channel = ssh.get_transport().open_session()
+            channel.get_pty()
+            channel.exec_command(command)
 
             # read until iperf quits
-            while not chan.exit_status_ready():
-                if chan.recv_ready():
-                    out = chan.recv(1024).decode()
-                    # cumulative store (across runs)
-                    self._iperf_outputs[ip].append(out)
-                    # per-run store (this run only)
-                    self._current_run_outputs[ip].append(out)
-
-                    # detect and store the iperf PID and its descendants
-                    for m in self._pid_re.finditer(out):
-                        parent_pid = int(m.group(1))
-                        descendants = self._get_descendant_pids(ip, username, password, parent_pid)
-                        with self._pids_lock:
-                            self._iperf_pids[ip].add(parent_pid)
-                            self._iperf_pids[ip].update(descendants)
-
-                    # extract and keep percentage values for this run
-                    for m in self._pct_re.finditer(out):
-                        try:
-                            pct_val = float(m.group(1))
-                            self._current_run_pcts[ip].append(pct_val)
-                        except ValueError:
-                            pass
-
-                    if ip == self._server_ip:
-                        for m in self._pct_re.finditer(out):
-                            print(m.group(1) + '%')
+            while not channel.exit_status_ready():
+                if channel.recv_ready():
+                    out = channel.recv(1024).decode()
+                    self._process_output(ip, out)
                 time.sleep(0.1)
 
             # drain any leftover bytes
-            while chan.recv_ready():
-                out = chan.recv(1024).decode()
-                self._iperf_outputs[ip].append(out)
-                self._current_run_outputs[ip].append(out)
-
-                for m in self._pid_re.finditer(out):
-                    parent_pid = int(m.group(1))
-                    descendants = self._get_descendant_pids(ip, username, password, parent_pid)
-                    with self._pids_lock:
-                        self._iperf_pids[ip].add(parent_pid)
-                        self._iperf_pids[ip].update(descendants)
-
-                for m in self._pct_re.finditer(out):
-                    try:
-                        pct_val = float(m.group(1))
-                        self._current_run_pcts[ip].append(pct_val)
-                    except ValueError:
-                        pass
-
-                if ip == self._server_ip:
-                    for m in self._pct_re.finditer(out):
-                        print(m.group(1) + '%')
+            while channel.recv_ready():
+                out = channel.recv(1024).decode()
+                self._process_output(ip, out)
 
         except Exception as e:
             print(f"[{ip}] Error: {e}")
@@ -259,6 +234,24 @@ class HW6Demod(BaseSnmpClient):
             ssh.close()
             print(f"[{ip}] Disconnected")
 
+    def run_iperf(self):
+        """
+        Launches iperf on both server & client in parallel threads.
+        """
+        threads = []
+        for host in self._hosts:
+            t = threading.Thread(
+                target=self._run_command,
+                args=(host["ip"], host["username"], host["password"], host["cmd"]),
+            )
+            t.start()
+            threads.append(t)
+
+        for t in threads:
+            t.join()
+
+        print("All iperf sessions completed.")
+        
     def _get_descendant_pids(self, ip: str, username: str, password: str, parent_pid: int):
         """
         Return all descendant PIDs (children, grandchildren, ...) of parent_pid on the remote host.
@@ -290,67 +283,3 @@ class HW6Demod(BaseSnmpClient):
         finally:
             client.close()
         return pids
-
-    def run_iperf(self):
-        """
-        Launches iperf on both server & client in parallel threads.
-        Keeps all iperf output in memory without printing it.
-        """
-        # clear previous PID tracking
-        with self._pids_lock:
-            for ip in self._iperf_pids:
-                self._iperf_pids[ip].clear()
-
-        threads = []
-        for host in self._hosts:
-            t = threading.Thread(
-                target=self._run_command,
-                args=(host["ip"], host["username"], host["password"], host["cmd"]),
-            )
-            t.start()
-            threads.append(t)
-
-        for t in threads:
-            t.join()
-
-        print("All iperf sessions completed.")
-
-    def term_iperf(self):
-        """
-        Send SIGTERM to all tracked iperf PIDs (including descendants) on both hosts.
-        """
-        for host in self._hosts:
-            ip = host["ip"]
-            with self._pids_lock:
-                pids = sorted(self._iperf_pids.get(ip, set()))
-            if not pids:
-                continue
-            pid_list = " ".join(str(p) for p in pids)
-            self._remote_kill(ip, host["username"], host["password"], f"kill -TERM {pid_list} || true")
-
-    def kill_iperf(self):
-        """
-        Send SIGKILL to all tracked iperf PIDs (including descendants) on both hosts.
-        """
-        for host in self._hosts:
-            ip = host["ip"]
-            with self._pids_lock:
-                pids = sorted(self._iperf_pids.get(ip, set()))
-            if not pids:
-                continue
-            pid_list = " ".join(str(p) for p in pids)
-            self._remote_kill(ip, host["username"], host["password"], f"kill -KILL {pid_list} || true")
-
-    def _remote_kill(self, ip: str, username: str, password: str, cmd: str):
-        """
-        Execute a kill command on the remote host.
-        """
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        try:
-            client.connect(ip, username=username, password=password)
-            client.exec_command(cmd)
-        except Exception as e:
-            print(f"[{ip}] kill error: {e}")
-        finally:
-            client.close()
