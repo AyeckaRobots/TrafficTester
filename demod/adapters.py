@@ -27,17 +27,19 @@ class RestDemodAdapter(Demodulator):
     def get_esno(self) -> float:
         return float(self._d.get_esno())
 
-    def get_packet_traffic(self) -> float:
+    def get_packet_loss_percentage(self) -> float:
         raw = self._d.get_packet_traffic()
         good = raw.get("good_frame_counter", raw.get("good", 0))
         bad = raw.get("bad_frame_counter", raw.get("bad", 0))
         missed = raw.get("missed_frame_counter", raw.get("missed", 0))
         total = good + bad + missed
+        lost = bad + missed
         if total > 0:
-            percentage = (good / total) * 100
+            percentage = (lost / total) * 100
         else:
             percentage = 0.0
         return percentage
+
 
     def reset_counters(self) -> None:
         self._d.reset_counters()

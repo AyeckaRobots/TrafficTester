@@ -26,7 +26,7 @@ class NoiseIndex:
             groups[(f, r, p)] = (esnos, noises)
         return groups
 
-    def get_closest_esno_noise(self, freq, symrate, power, target_esno):
+    def get_closest_noise(self, freq, symrate, power, target_esno):
         key = (freq, symrate, power)
         if key not in self.index:
             raise ValueError(f"No data for freq={freq}, symrate={symrate}, power={power}")
@@ -63,7 +63,7 @@ class NoiseIndex:
         print(f"⏳ Initializing: freq={freq} MHz, symrate={symrate} Msps, power={power} dBm, target ESNO={target_esno} dB")
 
         # initial measurement
-        result = self.get_closest_esno_noise(freq, symrate, power, target_esno)
+        result = self.get_closest_noise(freq, symrate, power, target_esno)
         requested = result['requested_esno']
         closest = result['closest_esno']
         noise_dec = result['noise_dec']
@@ -112,7 +112,7 @@ def main():
 
     print(f"freq={freq} MHz, symrate={symrate} Msps, power={power} dBm, target ESNO={esno} dB")
 
-    result = noise_index.adjust_noise(freq, symrate, power, esno)
+    result = noise_index.get_closest_noise(freq, symrate, power, esno)
 
     print(result)
 

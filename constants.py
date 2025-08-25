@@ -8,3 +8,8 @@ LINESTATE_OID = ".1.3.6.1.4.1.37576.4.2.1.2.0"
 
 ADMIN_USER = "admin"
 ADMIN_PASS = "admin"
+
+# Testing settings
+LOCK_TIMEOUT = 10
+ESNO_SYNC_TIMEOUT = 10
+TEST_TIME = 60
