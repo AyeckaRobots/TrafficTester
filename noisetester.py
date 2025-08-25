@@ -192,7 +192,7 @@ class NoiseTester:
     def execute_test(self):
         """
         Top-level logic with robust error handling and logging.
-        Any recoverable error will be logged; fatal errors will be logged and the method will return.
+        Now measures ESNO *only after* lock + noise applied + 7 second wait.
         """
         logger.info("🎛️  Setting modulator: freq=%s MHz, symrate=%s Msps, power=%s dBm, PLS=%s",
                     self.freq, self.symrate, self.power, self.pls)
@@ -216,65 +216,57 @@ class NoiseTester:
         logger.info("🔒 Waiting for lock...")
         locked = self._wait_for_lock()
         if not locked:
-            logger.error("Device did not lock. Proceeding but results may be invalid.")
+            logger.error("Device did not lock. Skipping ESNO measurement entirely.")
+        else:
+            logger.info("🔒 Locked — proceeding to noise lookup and application.")
 
-        logger.info("🎯 Target ESNO: %s dB", self.target_esno)
-
-        # Wait for ESNO target, but do not raise — log and continue on timeout/errors
-        timeout = ESNO_SYNC_TIMEOUT
-        start = time.time()
-        while True:
-            esno = safe_call(self.dut, "get_esno", fallback=None)
-            if esno is None:
-                logger.warning("get_esno returned None; will retry until timeout.")
-            else:
-                try:
-                    logger.info("📡 Current ESNO: %.1f dB", float(esno))
-                except Exception:
-                    logger.exception("Invalid ESNO value: %s", esno)
-
-                try:
-                    if float(esno) >= float(self.target_esno) + 0.5:
-                        logger.info("✅ ESNO target achieved.")
-                        break
-                except Exception:
-                    logger.debug("Skipping ESNO comparison due to invalid values.")
-
-            if time.time() - start > timeout:
-                logger.warning("⏱️ ESNO target not achieved in %s s — proceeding anyway.", timeout)
-                break
-            time.sleep(1)
-
-        # Attempt to get noise result
         noise_result = None
-        if self.noise_index:
-            try:
-                nearest = self.noise_index.get_closest_noise(self.freq, self.symrate, self.power, self.target_esno)
-                if isinstance(nearest, dict):
-                    noise_result = nearest.get('noise_dec')
-                logger.info("🔍 Closest noise: %s", noise_result)
-            except Exception:
-                logger.exception("Error while fetching closest noise.")
-        else:
-            logger.warning("Noise index not initialized; skipping noise lookup.")
+        if locked:
+            if self.noise_index:
+                try:
+                    nearest = self.noise_index.get_closest_noise(
+                        self.freq, self.symrate, self.power, self.target_esno
+                    )
+                    if isinstance(nearest, dict):
+                        noise_result = nearest.get('noise_dec')
+                    logger.info("🔍 Closest noise: %s", noise_result)
+                except Exception:
+                    logger.exception("Error while fetching closest noise.")
+            else:
+                logger.warning("Noise index not initialized; skipping noise lookup.")
 
-        # Apply noise to modulator here (safely)
-        if noise_result is not None and self.mod:
-            safe_call(self.mod, "set_noise", noise_result)
-        else:
-            logger.info("No noise applied (modulator or noise_result missing).")
+            if noise_result is not None and self.mod:
+                safe_call(self.mod, "set_noise", noise_result)
+                logger.info(f"⏳ Waiting {ESNO_SYNC_TIMEOUT} seconds after noise application...")
+                time.sleep(ESNO_SYNC_TIMEOUT)
 
+                # Now — and only now — measure ESNO
+                try:
+                    esno_after = safe_call(self.dut, "get_esno", fallback=None)
+                    if esno_after is not None:
+                        logger.info("📡 ESNO after noise: %.1f dB", float(esno_after))
+                        if float(esno_after) >= float(self.target_esno) + 0.5:
+                            logger.info("✅ ESNO target achieved.")
+                        else:
+                            logger.warning("⚠️ ESNO target not achieved.")
+                    else:
+                        logger.warning("Could not read ESNO after noise.")
+                except Exception:
+                    logger.exception("Error while reading ESNO after noise.")
+
+            else:
+                logger.info("No noise applied (missing noise_result or modulator). ESNO measurement skipped.")
+
+        # Run the actual test regardless of ESNO stage
         logger.info("🧪 Running test for %s seconds...", TEST_TIME)
-
-        # Run evaluation and print result
         try:
             eval_result = self._evaluate()
             if eval_result is not None:
-                logger.info("📊 Packet loss percentage: %.4f%%", eval_result.get("packet_loss_percentage", 0.0))
+                logger.info("📊 Packet loss percentage: %.4f%%",
+                            eval_result.get("packet_loss_percentage", 0.0))
             else:
                 logger.warning("Evaluation returned no result.")
         except Exception:
-            # _evaluate should handle exceptions itself, but catch anything unexpected
             logger.exception("Unexpected error during evaluation.")
 
         # Stop heartbeat
@@ -320,17 +312,17 @@ class NoiseTester:
 def main():
     try:
         # Example parameters (replace with actual values as needed)
-        freq = 1550.0
-        symrate = 6.0
+        freq = 1200.0
+        symrate = 12.0
         power = -30.0
-        pls = 61
+        pls = 5
 
         # Choose and initialize your demodulator adapter here
         # For example, using RestDemodAdapter:
         # dut = RestDemodAdapter(restdemod.RestDemod("192.168.10.200", "admin", "admin"))
         dut = HW6DemodAdapter(hw6demod.HW6Demod())
 
-        safe_call(dut, "switch_rx1")
+        safe_call(dut, "switch_rx2")
         tester = NoiseTester(freq, symrate, power, pls, dut)
         tester.execute_test()
     except Exception:
