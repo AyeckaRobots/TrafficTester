@@ -21,7 +21,7 @@ from demod.adapters import HW6DemodAdapter
 logger = logging.getLogger("NoiseTester")
 logger.setLevel(logging.DEBUG)
 
-# track last log time (for heartbeat suppression)
+# track last log time (for wait suppression)
 _last_lock = threading.Lock()
 _last_log = time.time()
 def _get_last_log():
@@ -47,27 +47,27 @@ ch.setFormatter(logging.Formatter(
     "%Y-%m-%d %H:%M:%S"
 ))
 
-# file handler (serious test report — no emojis, no heartbeats, no internals)
+# file handler (serious test report — no emojis, no waits, no internals)
 fh = logging.FileHandler("noise_tester.log")
 fh.setLevel(logging.INFO)
 
 class TestReportFormatter(logging.Formatter):
     def format(self, record):
         msg = record.getMessage()
-        # filter heartbeat explicitly
-        if "heartbeat" in msg.lower():
+        # filter wait explicitly
+        if "wait" in msg.lower() or "waiting" in msg.lower():
             return ""
         # strip emojis
         clean = re.sub(r"[^\x00-\x7F]+", " ", msg).strip()
         ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
         return f"{ts} [{record.levelname}] {clean}"
 
-class SkipHeartbeatFilter(logging.Filter):
+class SkipWaitFilter(logging.Filter):
     def filter(self, record):
-        return "heartbeat" not in record.getMessage().lower()
+        return "wait" not in record.getMessage().lower() and "waiting" not in record.getMessage().lower()
 
 fh.setFormatter(TestReportFormatter())
-fh.addFilter(SkipHeartbeatFilter())
+fh.addFilter(SkipWaitFilter())
 
 # attach handlers
 logger.handlers = []
@@ -76,8 +76,8 @@ logger.addHandler(ch)
 logger.addHandler(fh)
 
 
-class HeartbeatThread(threading.Thread):
-    """Only logs a heartbeat when interval seconds passed since the last *any* log."""
+class WaitThread(threading.Thread):
+    """Only logs a waiting message when interval seconds passed since the last *any* log."""
     def __init__(self, interval=3.0, stop_event: threading.Event = None):
         super().__init__(daemon=True)
         self.interval = float(interval)
@@ -146,9 +146,9 @@ class NoiseTester:
             logger.exception("Failed to init NoiseIndex: %s", e)
             self.noise_index = None
 
-        # For heartbeat control
+        # For wait control
         self._stop_event = threading.Event()
-        self._heartbeat = HeartbeatThread(interval=3.0, stop_event=self._stop_event)
+        self._wait_thread = WaitThread(interval=3.0, stop_event=self._stop_event)
 
     def _wait_for_lock(self):
         timeout = LOCK_TIMEOUT
@@ -162,7 +162,7 @@ class NoiseTester:
             if time.time() - start > timeout:
                 logger.warning("Lock not achieved in %s s", timeout)
                 return False
-            # short sleep so heartbeat continues separately
+            # short sleep so waiting message continues separately
             time.sleep(0.5)
 
     def _get_min_esno(self):
@@ -175,19 +175,19 @@ class NoiseTester:
         logger.warning("No entry for PLS %s — defaulting target_esno to 0.0", self.pls)
         return 0.0
 
-    def start_heartbeat(self):
-        if not self._heartbeat.is_alive():
-            logger.debug("Starting heartbeat thread.")
-            self._heartbeat.start()
+    def start_waiting(self):
+        if not self._wait_thread.is_alive():
+            logger.debug("Starting wait thread.")
+            self._wait_thread.start()
 
-    def stop_heartbeat(self):
-        logger.debug("Stopping heartbeat thread.")
+    def stop_waiting(self):
+        logger.debug("Stopping wait thread.")
         self._stop_event.set()
         # No join here required — it's daemon and will stop on program exit. join optionally:
         try:
-            self._heartbeat.join(timeout=1.0)
+            self._wait_thread.join(timeout=1.0)
         except Exception:
-            logger.debug("Heartbeat thread join failed/timeout.")
+            logger.debug("Wait thread join failed/timeout.")
 
     def execute_test(self):
         """
@@ -197,8 +197,8 @@ class NoiseTester:
         logger.info("🎛️  Setting modulator: freq=%s MHz, symrate=%s Msps, power=%s dBm, PLS=%s",
                     self.freq, self.symrate, self.power, self.pls)
 
-        # Start heartbeat so we always print something every 3 seconds
-        self.start_heartbeat()
+        # Start wait thread so we always print something every 3 seconds
+        self.start_waiting()
 
         # Safely call mod and dut setup methods
         if self.mod:
@@ -269,9 +269,9 @@ class NoiseTester:
         except Exception:
             logger.exception("Unexpected error during evaluation.")
 
-        # Stop heartbeat
-        self.stop_heartbeat()
-        logger.info("Test finished (heartbeat stopped).")
+        # Stop wait thread
+        self.stop_waiting()
+        logger.info("Test finished (wait thread stopped).")
 
     def _evaluate(self):
         """

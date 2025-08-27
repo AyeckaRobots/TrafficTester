@@ -55,7 +55,6 @@ class HW6DemodAdapter(Demodulator):
         pass
 
     def set_all(self, freq: float, symrate: float) -> None:
-        # Set frequency in MHz and symbol rate in Msps
         self._d.set_freq(freq)
         self._d.set_symrate(symrate)
 
@@ -82,4 +81,4 @@ class HW6DemodAdapter(Demodulator):
         self._d._server_pct_values = []
 
     def get_general_info(self) -> dict:
-        pass
+        return self._d.get_general_info()

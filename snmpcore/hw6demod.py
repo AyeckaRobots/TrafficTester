@@ -74,8 +74,21 @@ class HW6Demod(BaseSnmpClient):
         self._active_rx = None
 
 
-    def initial_config(self):
-        ...
+    def config_init(self):
+        # Switch mode manual
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.1.3.3.0", "i", 1)
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.2.3.3.0", "i", 1)
+
+        # Set active rx configuration
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.1.3.1.0", "i", 0)
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.2.3.1.0", "i", 0)
+
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.1.0", "a", "192.168.10.200") # mgmt ip addr
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.2.0", "a", "255.255.255.0") # mgmt subnet mask
+        #self._snmp_set("1.3.6.1.4.1.27928.107.2.8.0", "i", 0) # mgmt ip multicast
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.5.0", "i", 0) # mgmt dhcp client disabled
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.4.0", "a", "0.0.0.0") # mgmt default gateway
 
     def switch_rx1(self):
         self._snmp_set(
@@ -283,3 +296,21 @@ class HW6Demod(BaseSnmpClient):
         finally:
             client.close()
         return pids
+
+    def get_general_info(self):
+        serial_number      = self._parse_int(self._snmp_get_raw("1.3.6.1.4.1.27928.107.3.3.0", 0))
+        system_description = self._parse_octet_string(self._snmp_get_raw("1.3.6.1.2.1.1.1.0", 0))
+        software_version   = self._parse_octet_string(self._snmp_get_raw("1.3.6.1.4.1.27928.107.3.5.0", 0))
+        fpga_version       = self._parse_octet_string(self._snmp_get_raw("1.3.6.1.4.1.27928.107.3.6.0", 0))
+        hardware_version   = self._parse_octet_string(self._snmp_get_raw("1.3.6.1.4.1.27928.107.3.7.0", 0))
+        production_code    = self._parse_int(self._snmp_get_raw("1.3.6.1.4.1.27928.107.3.4.0", 0))
+
+        return {
+            "serial_number": serial_number,
+            "system_description": system_description,
+            "software_version": software_version,
+            "fpga_version": fpga_version,
+            "hardware_version": hardware_version,
+            "production_code": production_code
+        }
+

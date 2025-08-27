@@ -19,7 +19,20 @@ if __name__ == "__main__":
     demo.set_freq(1200)
     demo.set_symrate(12)
 
-    demo.run_iperf()
+    time.sleep(10)
+    print(demo.is_locked())
+    print(demo.get_esno())
+
+
+    demo.switch_rx2()
+    demo.set_freq(1200)
+    demo.set_symrate(12)
+
+    time.sleep(10)
+
+
+    print(demo.is_locked())
+    print(demo.get_esno())
     """demo.switch_rx1()
     demo.set_freq(1200)
     demo.set_symrate(12)
