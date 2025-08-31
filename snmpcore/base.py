@@ -33,6 +33,7 @@ class BaseSnmpClient:
             return host.get(oid).toString()
 
     def _snmp_set(self, oid: str, type_: str, value) -> None:
+        time.sleep(2)
         """Run snmpset against `oid` with given SNMP datatype and value."""
         cmd = [
             "snmpset",
@@ -53,17 +54,20 @@ class BaseSnmpClient:
 
 
     def _parse_int(self, raw: str) -> Optional[int]:
-        """Extract the first integer inside parentheses, or None."""
-        m = self._int_pattern.search(raw)
-        return int(m.group(1)) if m else None
+        # Match the pattern: word followed by parentheses with a number inside
+        match = re.search(r'(\w+)\(([-+]?\d*\.?\d+)\)', raw)
+        if match:
+            type_word = match.group(1).lower()
+            number_str = match.group(2)
 
-    def _parse_gauge32(self, raw: str) -> Optional[int]:
-        """
-        Extract integer from 'Gauge32(12345)'.
-        Returns the integer or None if no match.
-        """
-        m = self._gauge_pattern.search(raw)
-        return int(m.group(1)) if m else None
+            # Check if the type contains "integer" or "unsigned"
+            if "integer" in type_word or "unsigned" in type_word or "gauge" in type_word:
+                # Convert to int or float depending on the format
+                if '.' in number_str:
+                    return float(number_str)
+                else:
+                    return int(number_str)
+        return None  # If no match or condition not met
 
     def _parse_octet_string(self, raw: str) -> Optional[str]:
         """

@@ -19,30 +19,8 @@ if __name__ == "__main__":
     demo.set_freq(1200)
     demo.set_symrate(12)
 
-    time.sleep(10)
-    print(demo.is_locked())
-    print(demo.get_esno())
-
-
-    demo.switch_rx2()
-    demo.set_freq(1200)
-    demo.set_symrate(12)
-
-    time.sleep(10)
-
-
-    print(demo.is_locked())
-    print(demo.get_esno())
-    """demo.switch_rx1()
-    demo.set_freq(1200)
-    demo.set_symrate(12)
-    sleep(3)"""
-
-    """demo.switch_rx2()
-    demo.set_freq(1200)
-    demo.set_symrate(12)
-    time.sleep(10)
-    if demo.is_locked():
-        print(demo.get_esno())"""
+    #demo.switch_rx1()
+    #demo.set_freq(1200)
+    #demo.set_symrate(12)
 
     #demo._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)

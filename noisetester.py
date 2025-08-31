@@ -134,7 +134,7 @@ class NoiseTester:
 
         # DUTs and helpers
         try:
-            self.mod = restmod.RestMod(RESTMOD_IP, ADMIN_USER, ADMIN_PASS)
+            self.mod = restmod.RestMod(MOD_IP, ADMIN_USER, ADMIN_PASS)
         except Exception as e:
             logger.exception("Failed to init RestMod: %s", e)
             self.mod = None
@@ -221,6 +221,7 @@ class NoiseTester:
             logger.info("🔒 Locked — proceeding to noise lookup and application.")
 
         noise_result = None
+        esno_after = None  # Track ESNO for CSV
         if locked:
             if self.noise_index:
                 try:
@@ -259,6 +260,7 @@ class NoiseTester:
 
         # Run the actual test regardless of ESNO stage
         logger.info("🧪 Running test for %s seconds...", TEST_TIME)
+        eval_result = None
         try:
             eval_result = self._evaluate()
             if eval_result is not None:
@@ -273,6 +275,43 @@ class NoiseTester:
         self.stop_waiting()
         logger.info("Test finished (wait thread stopped).")
 
+        # --- CSV writing section ---
+        try:
+            csv_file = "test_results.csv"
+            file_exists = os.path.isfile(csv_file)
+
+            with open(csv_file, "a", newline="") as f:
+                writer = csv.writer(f)
+
+                general_info = safe_call(self.dut, "get_general_info", fallback={})
+                general_keys = list(general_info.keys())
+                general_values = [general_info.get(k, "") for k in general_keys]
+
+                if not file_exists:
+                    writer.writerow(
+                        general_keys + [
+                            "freq", "symrate", "power", "pls",
+                            "noise", "esno_after", "packet_loss_percentage"
+                        ]
+                    )
+
+                writer.writerow(
+                    general_values + [
+                        self.freq,
+                        self.symrate,
+                        self.power,
+                        self.pls,
+                        noise_result if noise_result is not None else "",
+                        float(esno_after) if esno_after is not None else "",
+                        eval_result.get("packet_loss_percentage", "") if eval_result else ""
+                    ]
+                )
+
+            logger.info("Results written to %s", csv_file)
+
+        except Exception:
+            logger.exception("Failed to write results to CSV.")
+
     def _evaluate(self):
         """
         Run the modulator for TEST_TIME seconds.
@@ -280,7 +319,6 @@ class NoiseTester:
         Returns a dict or None on failure.
         """
         try:
-            TEST_TIME = 60  # seconds
             self.dut.reset_counters()
             start_time = time.time()
 
@@ -312,17 +350,15 @@ class NoiseTester:
 def main():
     try:
         # Example parameters (replace with actual values as needed)
-        freq = 1200.0
-        symrate = 12.0
+        freq = 1550.0
+        symrate = 11.0
         power = -30.0
-        pls = 5
+        pls = 61
 
-        # Choose and initialize your demodulator adapter here
-        # For example, using RestDemodAdapter:
-        # dut = RestDemodAdapter(restdemod.RestDemod("192.168.10.200", "admin", "admin"))
+        # dut = RestDemodAdapter(restdemod.RestDemod(DEMOD_IP, "admin", "admin"))
         dut = HW6DemodAdapter(hw6demod.HW6Demod())
 
-        safe_call(dut, "switch_rx2")
+        safe_call(dut, "switch_rx1")
         tester = NoiseTester(freq, symrate, power, pls, dut)
         tester.execute_test()
     except Exception:

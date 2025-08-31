@@ -16,21 +16,21 @@ class HW6Demod(BaseSnmpClient):
 
     def __init__(
         self,
-        ip: str = "192.168.10.200",
+        ip: str = DEMOD_IP,
         public_comm: bytes = b"public",
         private_comm: str = "private",
 
-        server_ip: str = "192.168.115.11",
-        client_ip: str = "192.168.115.36",
+        server_ip: str = IPERF_SERVER_IP,
+        client_ip: str = IPERF_CLIENT_IP,
 
-        server_username: str = "user",
-        server_password: str = "user",
-        client_username: str = "user",
-        client_password: str = "user",
+        server_username: str = IPERF_CLIENT_USERNAME,
+        server_password: str = IPERF_CLIENT_PASSWORD,
+        client_username: str = IPERF_SERVER_USERNAME,
+        client_password: str = IPERF_SERVER_PASSWORD,
 
-        multicast: str = "225.1.1.1",
-        server_gw: str = "192.168.9.11",
-        client_gw: str = "192.168.9.1",
+        multicast: str = MULTICAST_ADDR,
+        server_gw: str = SERVER_GW,
+        client_gw: str = CLIENT_GW,
         runtime: int = 10000,
         bitrate: str = "25M"
     ):
@@ -73,8 +73,13 @@ class HW6Demod(BaseSnmpClient):
 
         self._active_rx = None
 
-
     def config_init(self):
+        """self._snmp_set("1.3.6.1.4.1.27928.107.2.5.0", "i", 0) # mgmt dhcp client disabled
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.1.0", "a", DEMOD_IP) # mgmt ip addr
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.2.0", "a", "255.255.255.0") # mgmt subnet mask  
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.4.0", "a", "0.0.0.0") # mgmt default gateway
+        #self._snmp_set("1.3.6.1.4.1.27928.107.2.8.0", "i", 0) # mgmt ip multicast"""
+
         # Switch mode manual
         self._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)
         self._snmp_set("1.3.6.1.4.1.27928.107.1.1.3.3.0", "i", 1)
@@ -84,11 +89,13 @@ class HW6Demod(BaseSnmpClient):
         self._snmp_set("1.3.6.1.4.1.27928.107.1.1.3.1.0", "i", 0)
         self._snmp_set("1.3.6.1.4.1.27928.107.1.2.3.1.0", "i", 0)
 
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.1.0", "a", "192.168.10.200") # mgmt ip addr
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.2.0", "a", "255.255.255.0") # mgmt subnet mask
-        #self._snmp_set("1.3.6.1.4.1.27928.107.2.8.0", "i", 0) # mgmt ip multicast
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.5.0", "i", 0) # mgmt dhcp client disabled
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.4.0", "a", "0.0.0.0") # mgmt default gateway
+        # Power off lnb power
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.1.1.3.1.0", "i", 0) # rx1 lnb power off
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.1.1.3.2.0", "i", 0) # rx1 lnb compensation off
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.2.1.3.1.0", "i", 0) # rx2 lnb power off
+        self._snmp_set("1.3.6.1.4.1.27928.107.1.2.1.3.2.0", "i", 0) # rx2 lnb compensation off
+
+        # IMPORTANT: set labels in Filters Table, 1, label "D0-D1-D2-D3-D4-D5" and enable it
 
     def switch_rx1(self):
         self._snmp_set(

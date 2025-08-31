@@ -10,7 +10,7 @@ from constants import *
 class NoiseIndex:
     def __init__(self, csv_path):
         self.index = self._build_index(csv_path)
-        self.mod = restmod.RestMod(RESTMOD_IP, ADMIN_USER, ADMIN_PASS)
+        self.mod = restmod.RestMod(MOD_IP, ADMIN_USER, ADMIN_PASS)
         self.demod = novelsatdemod.NovelsatDemod()
 
     def _build_index(self, csv_path):
