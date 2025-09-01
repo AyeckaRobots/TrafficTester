@@ -257,9 +257,25 @@ class HW6Demod(BaseSnmpClient):
             ssh.close()
             print(f"[{ip}] Disconnected")
 
+    def _kill_iperf(self, ip: str, username: str, password: str):
+        """
+        Kill all iperf processes on the remote host.
+        """
+        kill_cmd = "pkill -9 iperf"
+        ssh = paramiko.SSHClient()
+        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            ssh.connect(ip, username=username, password=password)
+            ssh.exec_command(kill_cmd)
+        except Exception as e:
+            print(f"[{ip}] Error killing iperf: {e}")
+        finally:
+            ssh.close()
+
     def run_iperf(self):
         """
         Launches iperf on both server & client in parallel threads.
+        Blocks for TEST_TIME seconds, then kills all iperf processes.
         """
         threads = []
         for host in self._hosts:
@@ -270,6 +286,14 @@ class HW6Demod(BaseSnmpClient):
             t.start()
             threads.append(t)
 
+        # Wait for TEST_TIME seconds
+        time.sleep(self._runtime)
+
+        # Kill iperf processes on both hosts
+        for host in self._hosts:
+            self._kill_iperf(host["ip"], host["username"], host["password"])
+
+        # Wait for threads to finish
         for t in threads:
             t.join()
 
