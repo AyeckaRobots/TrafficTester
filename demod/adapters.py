@@ -40,7 +40,6 @@ class RestDemodAdapter(Demodulator):
             percentage = 0.0
         return percentage
 
-
     def reset_counters(self) -> None:
         self._d.reset_counters()
 
@@ -71,9 +70,9 @@ class HW6DemodAdapter(Demodulator):
         return float(self._d.get_esno())
 
     def get_packet_traffic(self) -> float:
-        values = self._d._server_pct_values
-        if not values:
-            return 0.0
+        values = list(self._d._server_pct_values)
+        if len(values) == 0:
+            return None
         average = sum(values) / len(values)
         return round(average, 4)
 

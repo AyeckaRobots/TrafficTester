@@ -30,7 +30,7 @@ class RestMod(BaseRestClient):
     def set_noise(self, noise_val: int) -> None:
         self._post("/api/fpga_write", [{"address": 24688, "value": noise_val}])
 
-    def set_pls(self, pls_code: int) -> None:
+    def set_test_pattern_pls(self, pls_code: int) -> None:
         body = {
             "tx": {
                 "symbol_rate": {"min": 100, "max": 460_000},
@@ -38,6 +38,25 @@ class RestMod(BaseRestClient):
             }
         }
         self._post("/api/settings", body)
+
+    def set_data_pls(self, pls_code: int) -> None:
+        headers = {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Authorization': 'Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpYXQiOjE3NTY3MjQzMzksIm5iZiI6MTc1NjcyNDMzOSwianRpIjoiZjE4YTkzMWUtZDUxNi00ZjljLWJjNmItZTljMTAxZGVjZDI3IiwiZXhwIjoxNzU2NzUzMTM5LCJpZGVudGl0eSI6ImFkbWluIiwiZnJlc2giOmZhbHNlLCJ0eXBlIjoiYWNjZXNzIn0.MU2CG3Y2qwWd34n4m_YhhTwEctfCXFbt0sN9ZIFymWY',
+            'Connection': 'keep-alive',
+            'Content-Type': 'application/json',
+            'Origin': 'http://192.168.15.132',
+            'Referer': 'http://192.168.15.132/',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+        }
+
+        body = [
+            {
+                'pls_code': pls_code,
+            },
+        ]
+        self._post("/api/encapsulator", body)
 
     def set_all(
         self,

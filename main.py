@@ -1,8 +1,11 @@
 from snmpcore.hw6demod import HW6Demod
+from snmpcore import base
+from demod import adapters
+from restcore import restmod
 import time
 
 if __name__ == "__main__":
-    demo = HW6Demod(
+    """demod = HW6Demod(
         server_ip="192.168.115.11",
         client_ip="192.168.115.36",
         server_username= "user",
@@ -15,12 +18,9 @@ if __name__ == "__main__":
         runtime=10000,
         bitrate="25M"
     )
-    demo.switch_rx1()
-    demo.set_freq(1200)
-    demo.set_symrate(12)
 
-    #demo.switch_rx1()
-    #demo.set_freq(1200)
-    #demo.set_symrate(12)
+    adapter = adapters.HW6DemodAdapter(demod)
+    print(adapter.get_general_info())"""
 
-    #demo._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)
+    mod = restmod.RestMod("192.168.15.132", "admin", "admin")
+    mod.set_data_pls(61)

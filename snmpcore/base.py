@@ -25,7 +25,7 @@ class BaseSnmpClient:
         self._gauge_pattern  = re.compile(r'Gauge32\((-?\d+)\)')
         self._octet_pattern  = re.compile(r"OctetString\(b'([^']*)'\)")
 
-    def _snmp_get_raw(self, oid: str, delay: float) -> str:
+    def _snmp_get_raw(self, oid: str, delay: float = 0) -> str:
         """Sleep for `delay`, then fetch raw SNMP response string for `oid`."""
         time.sleep(delay)
         with Engine(SNMPv1, defaultCommunity=self.public) as engine:

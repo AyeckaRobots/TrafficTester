@@ -17,6 +17,9 @@ class HW6Demod(BaseSnmpClient):
     def __init__(
         self,
         ip: str = DEMOD_IP,
+        runtime: int = TEST_TIME,
+        bitrate: str = "25M",
+
         public_comm: bytes = b"public",
         private_comm: str = "private",
 
@@ -30,9 +33,7 @@ class HW6Demod(BaseSnmpClient):
 
         multicast: str = MULTICAST_ADDR,
         server_gw: str = SERVER_GW,
-        client_gw: str = CLIENT_GW,
-        runtime: int = 10000,
-        bitrate: str = "25M"
+        client_gw: str = CLIENT_GW
     ):
         # initialize SNMP
         super().__init__(ip, public_comm, private_comm)
@@ -74,11 +75,10 @@ class HW6Demod(BaseSnmpClient):
         self._active_rx = None
 
     def config_init(self):
-        """self._snmp_set("1.3.6.1.4.1.27928.107.2.5.0", "i", 0) # mgmt dhcp client disabled
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.1.0", "a", DEMOD_IP) # mgmt ip addr
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.2.0", "a", "255.255.255.0") # mgmt subnet mask  
-        self._snmp_set("1.3.6.1.4.1.27928.107.2.4.0", "a", "0.0.0.0") # mgmt default gateway
-        #self._snmp_set("1.3.6.1.4.1.27928.107.2.8.0", "i", 0) # mgmt ip multicast"""
+        """
+        Assuming mgmt DHCP is disabled and the mgmt ip addr is already configured
+        """
+        self._snmp_set("1.3.6.1.4.1.27928.107.2.12.0", "i", 0) # lan multicast enable
 
         # Switch mode manual
         self._snmp_set("1.3.6.1.4.1.27928.107.1.3.2.0", "i", 1)
@@ -98,15 +98,19 @@ class HW6Demod(BaseSnmpClient):
         # IMPORTANT: set labels in Filters Table, 1, label "D0-D1-D2-D3-D4-D5" and enable it
 
     def switch_rx1(self):
-        self._snmp_set(
-            "1.3.6.1.4.1.27928.107.1.3.1.0", "i", 1
-        )
+        active_rx = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.3.1.0")
+        active_rx = self._parse_int(active_rx)
+        if active_rx != 1:
+            self._snmp_set(
+                "1.3.6.1.4.1.27928.107.1.3.1.0", "i", 1
+            )
         self._active_rx = 1
 
     def switch_rx2(self):
-        self._snmp_set(
-            "1.3.6.1.4.1.27928.107.1.3.1.0", "i", 2
-        )
+        active_rx = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.3.1.0")
+        active_rx = self._parse_int(active_rx)
+        if active_rx != 2:
+            self._snmp_set("1.3.6.1.4.1.27928.107.1.3.1.0", "i", 2)
         self._active_rx = 2
 
     def get_freq(self) -> Optional[int]:
@@ -164,9 +168,9 @@ class HW6Demod(BaseSnmpClient):
 
     def is_locked(self):
         if self._active_rx == 1:
-            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.1.4.11.0", 2.0)
+            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.1.4.11.0")
         elif self._active_rx == 2:
-            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.2.4.11.0", 2.0)
+            raw = self._snmp_get_raw("1.3.6.1.4.1.27928.107.1.2.4.11.0")
         else:
             raise(Exception)
 
@@ -217,7 +221,6 @@ class HW6Demod(BaseSnmpClient):
                 formatted_pct = f"{pct:.4f}%"
                 if ip == self._server_ip:
                     self._server_pct_values.append(pct)
-                    print(formatted_pct)
             except Exception:
                 continue
 
