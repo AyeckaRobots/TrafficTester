@@ -62,12 +62,16 @@ class RestDemod(BaseRestClient):
         return {k: test_pattern[k] for k in keys if k in test_pattern}
     
     def switch_rx1(self):
-        payload = {'rf_source': 1}
-        self._post("/api/demodulator", payload)
+        rf_source = self._get("/api/demodulator")["rf_source"]
+        if rf_source != 1:
+            payload = {'rf_source': 1}
+            self._post("/api/demodulator", payload)
 
     def switch_rx2(self):
-        payload = {'rf_source': 2}
-        self._post("/api/demodulator", payload)
+        rf_source = self._get("/api/demodulator")["rf_source"]
+        if rf_source != 2:
+            payload = {'rf_source': 2}
+            self._post("/api/demodulator", payload)
     
     def is_locked(self):
         data = self._get("/api/status")

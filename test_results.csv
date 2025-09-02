@@ -1,2 +1,0 @@
-serial_number,system_description,software_version,fpga_version,hardware_version,production_code,freq,symrate,power,pls,noise,locked,esno_after,packet_loss_percentage
-302416,SR1p,9.00b112,9.10b032,6.36,724,1200.0,12.0,-30.0,61,114796,true,10.6,0.2181

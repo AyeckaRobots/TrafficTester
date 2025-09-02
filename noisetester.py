@@ -189,14 +189,18 @@ class NoiseTester:
         except Exception:
             logger.debug("Wait thread join failed/timeout.")
 
-    def _write_csv_result(self, noise_result, locked, esno_after, eval_result):
+    def _write_csv_result(self, noise_result, locked, esno, eval_result):
         try:
-            csv_file = "test_results.csv"
+            # Select CSV file based on DUT type
+            if isinstance(self.dut, HW6DemodAdapter):
+                csv_file = "hw6_test_results.csv"
+            elif isinstance(self.dut, RestDemodAdapter):
+                csv_file = "hw7_test_results.csv"
+
             file_exists = os.path.isfile(csv_file)
             needs_header = True
 
             if file_exists:
-                # Check if file is empty
                 needs_header = os.path.getsize(csv_file) == 0
 
             with open(csv_file, "a", newline="") as f:
@@ -206,13 +210,17 @@ class NoiseTester:
                 general_keys = list(general_info.keys())
                 general_values = [general_info.get(k, "") for k in general_keys]
 
+                header = (
+                    general_keys + [
+                        "freq", "symrate", "power", "pls",
+                        "noise", "locked", "esno", "packet_loss_percentage"
+                    ]
+                )
+
                 if needs_header:
-                    writer.writerow(
-                        general_keys + [
-                            "freq", "symrate", "power", "pls",
-                            "noise", "locked", "esno_after", "packet_loss_percentage"
-                        ]
-                    )
+                    # Write a title row describing the test values
+                    #writer.writerow(["Test Results: freq (MHz), symrate (Msps), power (dBm), pls, noise, locked, esno (dB), packet_loss_percentage (%)"])
+                    writer.writerow(header)
 
                 writer.writerow(
                     general_values + [
@@ -222,7 +230,7 @@ class NoiseTester:
                         self.pls,
                         noise_result if noise_result is not None else "none",
                         "true" if locked else "false",
-                        float(esno_after) if esno_after is not None else "none",
+                        float(esno) if esno is not None else "none",
                         (
                             str(eval_result.get("packet_loss_percentage"))
                             if eval_result and eval_result.get("packet_loss_percentage") is not None
@@ -260,7 +268,7 @@ class NoiseTester:
         if self.noise_index:
             try:
                 nearest = self.noise_index.get_closest_noise(
-                    self.freq, self.symrate, self.power, self.target_esno+1
+                    self.freq, self.symrate, self.power, self.target_esno+0.5
                 )
                 if isinstance(nearest, dict):
                     noise_result = nearest.get('noise_dec')
@@ -278,12 +286,9 @@ class NoiseTester:
         safe_call(self.dut, "set_all", self.freq, self.symrate)
         time.sleep(1)
 
-        logger.info("🔄 Resetting DUT counters...")
-        safe_call(self.dut, "reset_counters")
-
         logger.info("🔒 Waiting for lock...")
         locked = self._wait_for_lock()
-        esno_after = None  # Track ESNO for CSV
+        esno = None  # Track ESNO for CSV
 
         if not locked:
             logger.error("Device did not lock. Skipping ESNO measurement and test.")
@@ -291,7 +296,7 @@ class NoiseTester:
             self._write_csv_result(
                 noise_result=noise_result,
                 locked=False,
-                esno_after=None,
+                esno=None,
                 eval_result=None
             )
             logger.info("Test finished (wait thread stopped).")
@@ -302,10 +307,10 @@ class NoiseTester:
             logger.info(f"⏳ Waiting {ESNO_SYNC_TIMEOUT} seconds after noise application...")
             time.sleep(ESNO_SYNC_TIMEOUT)
             try:
-                esno_after = safe_call(self.dut, "get_esno", fallback=None)
-                if esno_after is not None:
-                    logger.info("📡 ESNO after noise: %.1f dB", float(esno_after))
-                    if float(esno_after) >= float(self.target_esno) + 1:
+                esno = safe_call(self.dut, "get_esno", fallback=None)
+                if esno is not None:
+                    logger.info("📡 ESNO after noise: %.1f dB", float(esno))
+                    if float(esno) >= float(self.target_esno) + 1:
                         logger.info("✅ ESNO target achieved.")
                     else:
                         logger.warning("⚠️ ESNO target not achieved.")
@@ -316,12 +321,16 @@ class NoiseTester:
         else:
             logger.info("No noise applied (missing noise_result or modulator). ESNO measurement skipped.")
 
+        logger.info("🔄 Resetting DUT counters...")
+        safe_call(self.dut, "reset_counters")
+
         # Run iperf test to measure bitrate and packet loss
         eval_result = None
-        if hasattr(self.dut, "_d") and hasattr(self.dut._d, "run_iperf"):
-            logger.info("🚀 Running iperf test to measure bitrate and packet loss for %s seconds...", TEST_TIME)
-            safe_call(self.dut._d, "run_iperf")
-            # After iperf, fetch packet loss
+        # Use adapter method instead of direct _d access
+        if hasattr(self.dut, "run_packet_traffic"):
+            logger.info("🚀 Running packet traffic test to measure bitrate and packet loss for %s seconds...", TEST_TIME)
+            safe_call(self.dut, "run_packet_traffic")
+            # After test, fetch packet loss
             try:
                 packet_loss_raw = safe_call(self.dut, "get_packet_traffic", fallback=None)
                 if packet_loss_raw is not None:
@@ -336,7 +345,7 @@ class NoiseTester:
             except Exception:
                 logger.exception("Unexpected error during evaluation.")
         else:
-            logger.warning("DUT does not support iperf test.")
+            logger.warning("DUT does not support packet traffic test.")
 
         self.stop_waiting()  # <-- Always stop the wait thread after test
 
@@ -345,7 +354,7 @@ class NoiseTester:
         self._write_csv_result(
             noise_result=noise_result,
             locked=locked,
-            esno_after=esno_after,
+            esno=esno,
             eval_result=eval_result
         )
 
@@ -392,7 +401,7 @@ def main():
         power = -30.0
         pls = 61
 
-        # dut = RestDemodAdapter(restdemod.RestDemod(DEMOD_IP, "admin", "admin"))
+        #dut = RestDemodAdapter(restdemod.RestDemod(DEMOD_IP, "admin", "admin"))
         dut = HW6DemodAdapter(hw6demod.HW6Demod())
 
         safe_call(dut, "switch_rx1")

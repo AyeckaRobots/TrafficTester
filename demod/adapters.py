@@ -4,6 +4,8 @@ from demod.iface import Demodulator
 
 from restcore import restdemod
 from snmpcore import hw6demod
+from constants import TEST_TIME
+import time
 
 class RestDemodAdapter(Demodulator):
     def __init__(self, inner: restdemod.RestDemod):
@@ -27,24 +29,27 @@ class RestDemodAdapter(Demodulator):
     def get_esno(self) -> float:
         return float(self._d.get_esno())
 
-    def get_packet_loss_percentage(self) -> float:
+    def get_packet_traffic(self) -> float:
         raw = self._d.get_packet_traffic()
-        good = raw.get("good_frame_counter", raw.get("good", 0))
-        bad = raw.get("bad_frame_counter", raw.get("bad", 0))
-        missed = raw.get("missed_frame_counter", raw.get("missed", 0))
+
+        good = raw["good_frame_counter"] if "good_frame_counter" in raw else 0
+        bad = raw["bad_frame_counter"] if "bad_frame_counter" in raw else 0
+        missed = raw["missed_frame_counter"] if "missed_frame_counter" in raw else 0
+
         total = good + bad + missed
         lost = bad + missed
-        if total > 0:
-            percentage = (lost / total) * 100
-        else:
-            percentage = 0.0
-        return percentage
 
-    def reset_counters(self) -> None:
+        percentage = (lost / total) * 100 if total > 0 else 0.0
+        return round(percentage, 4)
         self._d.reset_counters()
 
     def get_general_info(self) -> dict:
         return self._d.get_general_info()
+
+    def run_packet_traffic(self) -> None:
+        #self._d.start_packet_traffic()
+        time.sleep(TEST_TIME)
+        #self._d.stop_packet_traffic()
 
 class HW6DemodAdapter(Demodulator):
     def __init__(self, inner: hw6demod.HW6Demod):
@@ -81,3 +86,6 @@ class HW6DemodAdapter(Demodulator):
 
     def get_general_info(self) -> dict:
         return self._d.get_general_info()
+
+    def run_packet_traffic(self) -> None:
+        self._d.run_iperf()
