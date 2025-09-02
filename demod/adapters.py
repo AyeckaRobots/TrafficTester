@@ -41,6 +41,8 @@ class RestDemodAdapter(Demodulator):
 
         percentage = (lost / total) * 100 if total > 0 else 0.0
         return round(percentage, 4)
+        
+    def reset_counters(self):
         self._d.reset_counters()
 
     def get_general_info(self) -> dict:

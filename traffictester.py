@@ -18,7 +18,7 @@ from demod.iface import Demodulator
 from demod.adapters import RestDemodAdapter
 from demod.adapters import HW6DemodAdapter
 
-logger = logging.getLogger("NoiseTester")
+logger = logging.getLogger("TrafficTester")
 logger.setLevel(logging.DEBUG)
 
 # track last log time (for wait suppression)
@@ -48,7 +48,7 @@ ch.setFormatter(logging.Formatter(
 ))
 
 # file handler (serious test report — no emojis, no waits, no internals)
-fh = logging.FileHandler("noise_tester.log")
+fh = logging.FileHandler("traffictester.log")
 fh.setLevel(logging.INFO)
 
 class TestReportFormatter(logging.Formatter):
@@ -115,7 +115,7 @@ def safe_call(obj, method_name, *args, fallback=None, **kwargs):
         return fallback
 
 
-class NoiseTester:
+class TrafficTester:
     def __init__(self, freq, symrate, power, pls, dut: Demodulator):
         self.freq = freq
         self.symrate = symrate
@@ -405,7 +405,7 @@ def main():
         dut = HW6DemodAdapter(hw6demod.HW6Demod())
 
         safe_call(dut, "switch_rx1")
-        tester = NoiseTester(freq, symrate, power, pls, dut)
+        tester = TrafficTester(freq, symrate, power, pls, dut)
         tester.execute_test()
     except Exception:
         logger.exception("Unhandled exception in main — program will exit but exception was logged.")
