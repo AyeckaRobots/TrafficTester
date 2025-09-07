@@ -22,6 +22,7 @@ ADMIN_USER = "admin"
 ADMIN_PASS = "admin"
 
 # Testing settings
+IS_ALIVE_TIMEOUT = 3
 LOCK_TIMEOUT = 10
 ESNO_SYNC_TIMEOUT = 10
 TEST_TIME = 60

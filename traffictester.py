@@ -8,6 +8,7 @@ import traceback
 import logging
 import sys
 import re
+import socket
 
 from restcore import restmod, restdemod
 from snmpcore import hw6demod
@@ -151,12 +152,96 @@ class TrafficTester:
         except Exception:
             logger.exception("Failed to write results to CSV.")
 
+    def _is_host_up(self, host, tcp_ports=None, udp_ports=None):
+        """
+        Check if a host is alive by testing multiple TCP and/or UDP ports in parallel.
+        Returns True if ANY port check succeeds.
+        """
+        tcp_ports = tcp_ports or []
+        udp_ports = udp_ports or []
+        results = []
+
+        def check_tcp(port):
+            try:
+                with socket.create_connection((host, port), timeout=IS_ALIVE_TIMEOUT):
+                    results.append(True)
+            except Exception:
+                pass
+
+        def check_udp(port):
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                s.settimeout(IS_ALIVE_TIMEOUT)
+                try:
+                    s.sendto(b"", (host, port))
+                    try:
+                        s.recvfrom(1024)  # some services may reply
+                        results.append(True)
+                    except socket.timeout:
+                        # No reply but host accepted datagram → still considered alive
+                        results.append(True)
+                finally:
+                    s.close()
+            except Exception:
+                pass
+
+        threads = []
+
+        for p in tcp_ports:
+            t = threading.Thread(target=check_tcp, args=(p,), daemon=True)
+            threads.append(t)
+            t.start()
+
+        for p in udp_ports:
+            t = threading.Thread(target=check_udp, args=(p,), daemon=True)
+            threads.append(t)
+            t.start()
+
+        for t in threads:
+            t.join(IS_ALIVE_TIMEOUT + 0.5)
+
+        return any(results)
+
+    def _check_connectivity(self):
+        """
+        Check both modulator and DUT reachability using their known ports.
+        """
+        results = {}
+
+        def check_mod():
+            # REST modulator (usually HTTP/80 or HTTPS/443)
+            results["mod"] = self._is_host_up(MOD_IP, tcp_ports=[80, 443])
+
+        def check_dut():
+            # DUT (SNMP/161, Telnet/23, maybe HTTP/88)
+            results["dut"] = self._is_host_up(DEMOD_IP, tcp_ports=[23, 88], udp_ports=[161, 162])
+
+        t1 = threading.Thread(target=check_mod, daemon=True)
+        t2 = threading.Thread(target=check_dut, daemon=True)
+        t1.start(); t2.start()
+        t1.join(); t2.join()
+
+        if not results.get("mod"):
+            logger.error("❌ Modulator %s unreachable.", MOD_IP)
+            return False
+        if not results.get("dut"):
+            logger.error("❌ DUT %s unreachable.", DEMOD_IP)
+            return False
+
+        logger.info("✅ Connectivity check passed (modulator + DUT).")
+        return True
+
     def execute_test(self):
         """
         Top-level logic with robust error handling and logging.
         Now applies noise before waiting for lock.
         Sequence: set freq/symrate/power/noise -> wait for lock -> if locked, wait for ESNO -> start test.
         """
+
+        if not self._check_connectivity():
+            logger.error("Connectivity check failed. Aborting test.")
+            return
+
         # Check demodulator type before setting PLS
         if isinstance(self.dut, RestDemodAdapter):
             self.mod.set_test_pattern_pls(self.pls)
