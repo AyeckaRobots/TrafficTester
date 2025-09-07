@@ -97,6 +97,7 @@ class TrafficTester:
         except Exception:
             logger.debug("Wait thread join failed/timeout.")
 
+
     def _write_csv_result(self, noise_result, locked, esno, eval_result):
         try:
             # Select CSV file based on DUT type
@@ -118,6 +119,11 @@ class TrafficTester:
                 general_keys = list(general_info.keys())
                 general_values = [general_info.get(k, "") for k in general_keys]
 
+                # Add date and time
+                current_datetime = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                general_keys += ["date", "time"]
+                general_values += [current_datetime.split()[0], current_datetime.split()[1]]
+
                 header = (
                     general_keys + [
                         "freq", "symrate", "power", "pls",
@@ -126,8 +132,6 @@ class TrafficTester:
                 )
 
                 if needs_header:
-                    # Write a title row describing the test values
-                    #writer.writerow(["Test Results: freq (MHz), symrate (Msps), power (dBm), pls, noise, locked, esno (dB), packet_loss_percentage (%)"])
                     writer.writerow(header)
 
                 writer.writerow(
@@ -251,8 +255,6 @@ class TrafficTester:
         else:
             raise(Exception)
 
-        logger.info(f"🎛️  Setting modulator: freq={self.freq} MHz, symrate={self.symrate} Msps, power={self.power} dBm, PLS={self.pls}")
-
         self.start_waiting()
 
         # Safely call mod and dut setup methods
@@ -270,10 +272,14 @@ class TrafficTester:
         else:
             logger.warning("Noise index not initialized; skipping noise lookup.")
 
+        logger.info(f"🎛️  Setting modulator: freq={self.freq} MHz, symrate={self.symrate} Msps, power={self.power} dBm, PLS={self.pls}")
+
         if self.mod:
             safe_call(self.mod, "set_all", self.freq, self.symrate, self.power, noise=noise_result if noise_result is not None else 0)
         else:
             logger.warning("Modulator object not initialized; skipping set_all.")
+
+        logger.info(f"🎛️  Setting demodulator: freq={self.freq} MHz, symrate={self.symrate} Msps")
 
         safe_call(self.dut, "set_all", self.freq, self.symrate)
         time.sleep(1)
@@ -383,25 +389,4 @@ class TrafficTester:
         except Exception as e:
             logger.exception("Exception during evaluation: %s", e)
             return None
-
-
-def main():
-    try:
-        # Example parameters (replace with actual values as needed)
-        freq = 1200.0
-        symrate = 12.0
-        power = -30.0
-        pls = 61
-
-        #dut = RestDemodAdapter(restdemod.RestDemod(DEMOD_IP, "admin", "admin"))
-        dut = HW6DemodAdapter(hw6demod.HW6Demod())
-
-        safe_call(dut, "switch_rx1")
-        tester = TrafficTester(freq, symrate, power, pls, dut)
-        tester.execute_test()
-    except Exception:
-        logger.exception("Unhandled exception in main — program will exit but exception was logged.")
-
-
-if __name__ == "__main__":
-    main()
+        
