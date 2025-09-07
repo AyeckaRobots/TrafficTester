@@ -22,6 +22,7 @@ from demod.adapters import HW6DemodAdapter
 from utils.logging_setup import logger
 from utils.wait import WaitThread
 from utils.helpers import safe_call
+from utils.ping import CheckAlive
 
 class TrafficTester:
     def __init__(self, freq, symrate, power, pls, dut: Demodulator):
@@ -242,9 +243,21 @@ class TrafficTester:
         Sequence: set freq/symrate/power/noise -> wait for lock -> if locked, wait for ESNO -> start test.
         """
 
-        if not self._check_connectivity():
-            logger.error("Connectivity check failed. Aborting test.")
+        checker = CheckAlive()
+        results = checker.check_all_hosts()
+
+        for ip, alive in results.items():
+            if alive:
+                logger.info(f"✔ {ip} is reachable")
+            else:
+                logger.error(f"✖️  {ip} is unreachable")
+
+        if not all(results.values()):
+            logger.error("❌ Connectivity check failed. Aborting test.")
             return
+
+        logger.info("✅ Connectivity check passed (all devices reachable).")
+
 
         # Check demodulator type before setting PLS
         if isinstance(self.dut, RestDemodAdapter):
