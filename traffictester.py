@@ -18,102 +18,9 @@ from demod.iface import Demodulator
 from demod.adapters import RestDemodAdapter
 from demod.adapters import HW6DemodAdapter
 
-logger = logging.getLogger("TrafficTester")
-logger.setLevel(logging.DEBUG)
-
-# track last log time (for wait suppression)
-_last_lock = threading.Lock()
-_last_log = time.time()
-def _get_last_log():
-    with _last_lock:
-        return _last_log
-def _set_last_log(ts):
-    global _last_log
-    with _last_lock:
-        _last_log = ts
-
-class UpdateLastHandler(logging.Handler):
-    def emit(self, record):
-        try:
-            _set_last_log(getattr(record, "created", time.time()))
-        except Exception:
-            pass
-
-# console handler (keeps emojis + debug info)
-ch = logging.StreamHandler(sys.stdout)
-ch.setLevel(logging.INFO)
-ch.setFormatter(logging.Formatter(
-    "%(asctime)s [%(levelname)s] %(message)s",
-    "%Y-%m-%d %H:%M:%S"
-))
-
-# file handler (serious test report — no emojis, no waits, no internals)
-fh = logging.FileHandler("traffictester.log")
-fh.setLevel(logging.INFO)
-
-class TestReportFormatter(logging.Formatter):
-    def format(self, record):
-        msg = record.getMessage()
-        # filter wait explicitly
-        if "wait" in msg.lower() or "waiting" in msg.lower():
-            return ""
-        # strip emojis
-        clean = re.sub(r"[^\x00-\x7F]+", " ", msg).strip()
-        ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(record.created))
-        return f"{ts} [{record.levelname}] {clean}"
-
-class SkipWaitFilter(logging.Filter):
-    def filter(self, record):
-        return "wait" not in record.getMessage().lower() and "waiting" not in record.getMessage().lower()
-
-fh.setFormatter(TestReportFormatter())
-fh.addFilter(SkipWaitFilter())
-
-# attach handlers
-logger.handlers = []
-logger.addHandler(UpdateLastHandler())
-logger.addHandler(ch)
-logger.addHandler(fh)
-
-
-class WaitThread(threading.Thread):
-    """Only logs a waiting message when interval seconds passed since the last *any* log."""
-    def __init__(self, interval=3.0, stop_event: threading.Event = None):
-        super().__init__(daemon=True)
-        self.interval = float(interval)
-        self._stop = stop_event or threading.Event()
-
-    def run(self):
-        while not self._stop.is_set():
-            now = time.time()
-            if now - _get_last_log() >= self.interval:
-                # Send only to console handler, not file
-                msg = "⏳ Waiting..."
-                ts = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now))
-                ch.emit(logging.makeLogRecord({
-                    "name": logger.name,
-                    "levelno": logging.INFO,
-                    "levelname": "INFO",
-                    "msg": msg,
-                    "created": now
-                }))
-                _set_last_log(now)  # update so it won't spam
-            self._stop.wait(0.25)
-
-
-
-def safe_call(obj, method_name, *args, fallback=None, **kwargs):
-    """
-    Call obj.method_name(*args, **kwargs) and catch/log any exception.
-    Returns fallback on error.
-    """
-    try:
-        method = getattr(obj, method_name)
-        return method(*args, **kwargs)
-    except Exception as e:
-        logger.exception("Error calling %s.%s: %s", obj.__class__.__name__, method_name, e)
-        return fallback
-
+from utils.logging_setup import logger
+from utils.wait import WaitThread
+from utils.helpers import safe_call
 
 class TrafficTester:
     def __init__(self, freq, symrate, power, pls, dut: Demodulator):
@@ -136,7 +43,7 @@ class TrafficTester:
         try:
             self.mod = restmod.RestMod(MOD_IP, ADMIN_USER, ADMIN_PASS)
         except Exception as e:
-            logger.exception("Failed to init RestMod: %s", e)
+            logger.exception("Failed to create RestMod: %s", e)
             self.mod = None
 
         self.dut: Demodulator = dut
@@ -146,7 +53,7 @@ class TrafficTester:
             logger.exception("Failed to init NoiseIndex: %s", e)
             self.noise_index = None
 
-        # For wait control
+        # thread / stop event for wait/heartbeat
         self._stop_event = threading.Event()
         self._wait_thread = WaitThread(interval=3.0, stop_event=self._stop_event)
 
