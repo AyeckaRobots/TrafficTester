@@ -222,10 +222,10 @@ class TrafficTester:
         t1.join(); t2.join()
 
         if not results.get("mod"):
-            logger.error("❌ Modulator %s unreachable.", MOD_IP)
+            logger.error(f"❌ Modulator {MOD_IP} unreachable.")
             return False
         if not results.get("dut"):
-            logger.error("❌ DUT %s unreachable.", DEMOD_IP)
+            logger.error(f"❌ DUT {DEMOD_IP} unreachable.")
             return False
 
         logger.info("✅ Connectivity check passed (modulator + DUT).")
