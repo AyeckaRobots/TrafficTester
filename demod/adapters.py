@@ -49,9 +49,7 @@ class RestDemodAdapter(Demodulator):
         return self._d.get_general_info()
 
     def run_packet_traffic(self) -> None:
-        #self._d.start_packet_traffic()
         time.sleep(TEST_TIME)
-        #self._d.stop_packet_traffic()
 
 class HW6DemodAdapter(Demodulator):
     def __init__(self, inner: hw6demod.HW6Demod):

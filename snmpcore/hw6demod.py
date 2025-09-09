@@ -183,18 +183,7 @@ class HW6Demod(BaseSnmpClient):
             raise("maybe error in board")
         else:
             raise(Exception)
-        
-    """    def set_label(self, label: str) -> None:
-        if self._active_rx == 1:
-            self._snmp_set(
-                "1.3.6.1.4.1.27928.107.1.1.1.4.3.1.3.1.0", "x", label
-            )
-        elif self._active_rx == 2:
-            self._snmp_set(
-                "1.3.6.1.4.1.27928.107.1.2.1.4.3.1.3.1.0", "x", label
-            )
-        else:
-            raise(Exception)"""
+
     
     def get_label(self) -> str:
         if self._active_rx == 1:

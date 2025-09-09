@@ -90,18 +90,3 @@ class BaseSnmpClient:
         if 'OctetString' in raw:
             return self._parse_octet_string(raw)
         return None
-    
-    """
-           The TYPE is a single character, one of:
-              i  INTEGER
-              u  UNSIGNED
-              s  STRING
-              x  HEX STRING
-              d  DECIMAL STRING
-              n  NULLOBJ
-              o  OBJID
-              t  TIMETICKS
-              a  IPADDRESS
-              b  BITS
-    """
-

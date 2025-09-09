@@ -23,7 +23,7 @@ class NovelsatDemod(BaseSnmpClient):
 
     def get_freq(self) -> Optional[int]:
         """Read and return frequency (as raw integer) from the demod."""
-        raw = self._snmp_get_raw(FREQ_OID, delay=2.0)
+        raw = self._snmp_get_raw(".1.3.6.1.4.1.37576.4.1.1.2.0", delay=2.0)
         return self._parse_int(raw)
 
     def set_freq(self, freq_mhz: float) -> None:
@@ -31,11 +31,11 @@ class NovelsatDemod(BaseSnmpClient):
         Set frequency in mhz. Internally multiplies by 100_000 to match device scaling.
         """
         scaled = int(freq_mhz * 100_000)
-        self._snmp_set(FREQ_OID, "u", str(scaled))
+        self._snmp_set(".1.3.6.1.4.1.37576.4.1.1.2.0", "u", str(scaled))
 
     def get_symrate(self) -> Optional[int]:
         """Read and return symbol rate (as raw integer) from the demod."""
-        raw = self._snmp_get_raw(SYMRATE_OID, delay=2.0)
+        raw = self._snmp_get_raw(".1.3.6.1.4.1.37576.4.1.1.4.0", delay=2.0)
         return self._parse_int(raw)
 
     def set_symrate(self, symrate_ksps: float) -> None:
@@ -43,13 +43,13 @@ class NovelsatDemod(BaseSnmpClient):
         Set symbol rate in ksymbols/sec. Multiplies by 1_000_000 for device.
         """
         scaled = int(symrate_ksps * 1_000_000)
-        self._snmp_set(SYMRATE_OID, "i", str(scaled))
+        self._snmp_set(".1.3.6.1.4.1.37576.4.1.1.4.0", "i", str(scaled))
 
     def is_locked(self) -> Optional[bool]:
         """
         Return True if the demodulator is locked, False if not, None on parse failure.
         """
-        raw = self._snmp_get_raw(LINESTATE_OID, delay=1.0)
+        raw = self._snmp_get_raw(".1.3.6.1.4.1.37576.4.2.1.2.0", delay=1.0)
         val = self._parse_int(raw)
         return bool(val) if val is not None else None
 
@@ -70,7 +70,7 @@ class NovelsatDemod(BaseSnmpClient):
         with Engine(SNMPv1, defaultCommunity=self.public) as engine:
             host = engine.Manager(self.ip)
             for _ in range(trials):
-                raw = host.get(ESNO_OID).toString()
+                raw = host.get(".1.3.6.1.4.1.37576.4.2.1.3.0").toString()
                 m = pattern.search(raw)
                 if m:
                     samples.append(int(m.group(1)))

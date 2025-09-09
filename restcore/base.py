@@ -73,8 +73,8 @@ class BaseRestClient:
     def get_general_info(self):
         data = self._get("/api/status")
 
-        device_name = data["device_name"]
         serial_number = data["serial_number"]
+        device_name = data["device_name"]
         mdc = data["system"]["sw_version"]["mdc"]
         bca = data["system"]["sw_version"]["bca"]
         web = data["system"]["sw_version"]["web"]
@@ -84,8 +84,8 @@ class BaseRestClient:
         hw_version = data["system"]["hw_version"]
 
         return {
-            "device_name": device_name,
             "serial_number": serial_number,
+            "device_name": device_name,
             "mdc": mdc,
             "bca": bca,
             "web": web,
