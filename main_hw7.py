@@ -17,7 +17,7 @@ def main():
     pls = 61
 
     # REST demodulator typically needs the DEMOD_IP constant defined in constants.py
-    dut = RestDemodAdapter(restdemod.RestDemod(DEMOD_IP, ADMIN_USER, ADMIN_PASS))
+    dut = RestDemodAdapter(restdemod.RestDemod(DUT_IP, ADMIN_USER, ADMIN_PASS))
 
     # Switch to the selected RX input
     safe_call(dut, "switch_rx1")

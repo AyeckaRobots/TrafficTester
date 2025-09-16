@@ -7,6 +7,8 @@ from typing import Optional
 from snmpcore.base import BaseSnmpClient
 from constants import *
 
+from utils import ping
+from utils import dhcp
 
 class HW6Demod(BaseSnmpClient):
     """
@@ -16,7 +18,7 @@ class HW6Demod(BaseSnmpClient):
 
     def __init__(
         self,
-        ip: str = DEMOD_IP,
+        ip: str = DUT_IP,
         runtime: int = TEST_TIME,
         bitrate: str = "25M",
 
@@ -75,9 +77,20 @@ class HW6Demod(BaseSnmpClient):
         self._active_rx = None
 
     def config_init(self):
-        """
-        Assuming mgmt DHCP is disabled and the mgmt ip addr is already configured
-        """
+        # Ensure DUT is reachable, if not try to assign it an IP via DHCP
+        checker = ping.CheckAlive()
+        dhcp_server = dhcp.DHCPServer(listen_timeout=60, request_timeout=15)
+        if not checker.is_host_up(DUT_IP, udp_ports=[161, 162], timeout=2):
+            print("[*] DUT not reachable, starting DHCP server to assign it an IP")
+            dhcp_server.serve()
+        else:
+            print("[*] DUT is already reachable, continuing")
+
+        if not checker.is_host_up(DUT_IP, udp_ports=[161, 162], timeout=2):
+            raise Exception("DUT not reachable even after DHCP")
+        else:
+            print("[+] DUT is reachable, continuing")
+        # From now on, only possible when DUT has IP and is reachable
 
         self._snmp_set("1.3.6.1.4.1.27928.107.2.12.0", "i", 0) # lan multicast enable
 

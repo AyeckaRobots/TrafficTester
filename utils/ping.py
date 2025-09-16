@@ -1,17 +1,27 @@
 import socket
 import threading
 
-from constants import *
+from constants import IS_ALIVE_TIMEOUT, MOD_IP, DUT_IP, IPERF_CLIENT_IP, IPERF_SERVER_IP
 
 class CheckAlive:
     def __init__(self):
         pass
 
-    def _is_host_up(self, host, tcp_ports=None, udp_ports=None):
+    def is_host_up(self, host, tcp_ports=None, udp_ports=None, timeout=None):
         """
         Strict host check: requires a real TCP connect or UDP reply.
         Runs TCP and UDP checks in parallel, returns True if ANY succeed.
+
+        Args:
+            host (str): IP or hostname to check.
+            tcp_ports (list[int], optional): TCP ports to test.
+            udp_ports (list[int], optional): UDP ports to test.
+            timeout (float, optional): Seconds to wait per socket operation.
+                                        Defaults to IS_ALIVE_TIMEOUT.
+        Returns:
+            bool: True if any probe succeeds.
         """
+        timeout = timeout if timeout is not None else IS_ALIVE_TIMEOUT
         tcp_ports = tcp_ports or []
         udp_ports = udp_ports or []
         results = []
@@ -19,22 +29,22 @@ class CheckAlive:
 
         def check_tcp(port):
             try:
-                with socket.create_connection((host, port), timeout=IS_ALIVE_TIMEOUT):
+                with socket.create_connection((host, port), timeout=timeout):
                     results.append(True)
             except Exception:
-                pass  # no connect → not alive on this port
+                pass
 
         def check_udp(port):
             try:
                 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                s.settimeout(IS_ALIVE_TIMEOUT)
+                s.settimeout(timeout)
                 try:
                     s.sendto(b"", (host, port))
                     try:
-                        s.recvfrom(1024)  # must reply to be alive
+                        s.recvfrom(1024)
                         results.append(True)
                     except socket.timeout:
-                        pass  # no reply → not alive
+                        pass
                 finally:
                     s.close()
             except Exception:
@@ -51,34 +61,33 @@ class CheckAlive:
             t.start()
 
         for t in threads:
-            t.join(IS_ALIVE_TIMEOUT + 0.5)
+            t.join(timeout + 0.5)
 
         return any(results)
 
-
-    def check_all_hosts(self):
+    def check_all_hosts(self, timeout=None):
         """
-        Check if MOD_IP, DEMOD_IP, IPERF_CLIENT_IP, and IPERF_SERVER_IP are up.
+        Check if MOD_IP, DUT_IP, IPERF_CLIENT_IP, and IPERF_SERVER_IP are up.
         Runs all checks in parallel and returns a dict {ip: True/False}.
-        Completes in ~5 seconds max.
+        You can override the per-host timeout here as well.
         """
-        hosts = [MOD_IP, DEMOD_IP, IPERF_CLIENT_IP, IPERF_SERVER_IP]
+        hosts = [MOD_IP, DUT_IP, IPERF_CLIENT_IP, IPERF_SERVER_IP]
         tcp_ports = [22, 23, 88]
         udp_ports = [161, 162]
         results = {}
         threads = []
 
         def worker(ip):
-            results[ip] = self._is_host_up(ip, tcp_ports, udp_ports)
+            results[ip] = self.is_host_up(ip, tcp_ports, udp_ports, timeout=timeout)
 
-        # Launch all host checks in parallel
         for ip in hosts:
             t = threading.Thread(target=worker, args=(ip,), daemon=True)
             threads.append(t)
             t.start()
 
-        # Wait for all threads
+        # Allow a bit more time for all threads to finish
+        join_timeout = (timeout if timeout is not None else IS_ALIVE_TIMEOUT) + 2
         for t in threads:
-            t.join(timeout=IS_ALIVE_TIMEOUT + 2)
+            t.join(join_timeout)
 
         return results

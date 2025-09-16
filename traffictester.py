@@ -219,7 +219,7 @@ class TrafficTester:
 
         def check_dut():
             # DUT (SNMP/161, Telnet/23, maybe HTTP/88)
-            results["dut"] = self._is_host_up(DEMOD_IP, tcp_ports=[23, 88], udp_ports=[161, 162])
+            results["dut"] = self._is_host_up(DUT_IP, tcp_ports=[23, 88], udp_ports=[161, 162])
 
         t1 = threading.Thread(target=check_mod, daemon=True)
         t2 = threading.Thread(target=check_dut, daemon=True)
@@ -230,7 +230,7 @@ class TrafficTester:
             logger.error(f"❌ Modulator {MOD_IP} unreachable.")
             return False
         if not results.get("dut"):
-            logger.error(f"❌ DUT {DEMOD_IP} unreachable.")
+            logger.error(f"❌ DUT {DUT_IP} unreachable.")
             return False
 
         logger.info("✅ Connectivity check passed (modulator + DUT).")
