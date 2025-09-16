@@ -78,6 +78,7 @@ class HW6Demod(BaseSnmpClient):
         """
         Assuming mgmt DHCP is disabled and the mgmt ip addr is already configured
         """
+
         self._snmp_set("1.3.6.1.4.1.27928.107.2.12.0", "i", 0) # lan multicast enable
 
         # Switch mode manual

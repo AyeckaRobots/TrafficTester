@@ -238,9 +238,8 @@ class TrafficTester:
 
     def execute_test(self):
         """
-        Top-level logic with robust error handling and logging.
-        Now applies noise before waiting for lock.
-        Sequence: set freq/symrate/power/noise -> wait for lock -> if locked, wait for ESNO -> start test.
+        Runs a full test sequence: checks connectivity, configures signal parameters, applies noise, and verifies lock. 
+        If locked, measures ESNO and evaluates packet loss. Logs results and writes them to CSV.
         """
 
         checker = CheckAlive()
@@ -259,7 +258,7 @@ class TrafficTester:
         logger.info("✅ Connectivity check passed (all devices reachable).")
 
 
-        # Check demodulator type before setting PLS
+        # Check demodulator type before setting PLS (in test pattern or data)
         if isinstance(self.dut, RestDemodAdapter):
             self.mod.set_test_pattern_pls(self.pls)
         elif isinstance(self.dut, HW6DemodAdapter):
